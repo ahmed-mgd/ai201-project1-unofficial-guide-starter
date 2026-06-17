@@ -9,10 +9,7 @@
 
 ## Domain
 
-<!-- What topic or category of knowledge does your system cover?
-     Why is this knowledge valuable, and why is it hard to find through official channels?
-     Example: "Student reviews of CS professors at [university] — useful because official
-     course descriptions don't reflect teaching style, exam difficulty, or workload." -->
+The domain for this project is parking at the Ohio State University. Parking at OSU is run by a private company called CampusParc, and it seems to be focused more on profits than student convenience. Information is scattered throughout the company's site, which makes it hard to take advantage of perks such as off-peak parking and refunds for unused semesters. In addition, there are alternative options such as street parking and city permits, but they do not show up readily in search results. This agent corroborates between official and unofficial sources to dig out the best solutions to OSU's parking problems.
 
 ---
 
@@ -36,8 +33,6 @@
 | 10 | CampusParc — Returns, Refunds & Exchanges | Official | https://osu.campusparc.com/get-a-permit/returns-refunds-exchanges/ |
 | 11 | City of Columbus — University District Parking FAQ (PDF) | Official (PDF) | https://www.columbus.gov/files/sharedassets/city/v/1/services/ud-website-faq-_updated-6_10_21.pdf |
 
-**Ingestion process.** Reddit and Columbus.gov block automated scraping, so the raw sources were collected once in the browser (archived under `documents/raw/`) and converted to a consistent plain-text format with a small `title / url / source_type` header: Reddit threads from their `.json` (one comment per blank-line block; deleted/removed/AutoModerator comments and one-liners dropped), the CampusParc pages from their main content area, and the Columbus FAQ extracted from its PDF. The resulting files live in `documents/`. `ingest.py` then loads every file, parses its header, and cleans the body — decoding HTML entities, stripping non-breaking spaces, and removing Reddit UI noise (Reply/Share/vote counts/timestamps) — before handing the text to `chunking.py`. Run the whole pipeline with `python build_chunks.py`, which writes `chunks.jsonl` and prints the chunk count and sample chunks.
-
 ---
 
 ## Chunking Strategy
@@ -55,7 +50,7 @@
 
 **Why these choices fit your documents:** The 800-char cap keeps every chunk inside the 256-token input limit of `all-MiniLM-L6-v2` (longer text is silently truncated). The corpus has two shapes, so chunking is structure-aware: Reddit threads are split one-comment-per-chunk so conflicting opinions never blend into one vector, while official pages have their short blocks (headings, list items, paragraphs) greedily packed up to the cap so a heading stays attached to the content beneath it. Preprocessing strips HTML entities, non-breaking spaces, and Reddit UI noise (Reply/Share/vote counts/timestamps) before chunking. See `ingest.py` and `chunking.py`.
 
-**Final chunk count:** 108 chunks across 11 documents (8 Reddit threads + 3 official pages/PDF). Sizes range 20–799 characters (avg ~311); none exceed the 800-character cap.
+**Final chunk count:** 108 chunks across all documents.
 
 ---
 
@@ -168,29 +163,29 @@ The "ONLY ... never use outside or prior knowledge" rule plus the mandated exact
 
 **Grounded response 1**
 
-Query:
+Query: *Can I get a refund if I cancel or return my parking permit?*
 
-Response:
+Response: "According to the official CampusParc documents, refunds are available under certain conditions. - For annual permits purchased in full, a prorated refund is available, excluding the current and prior months. - For digital day passes, temporary monthly permits, and single-exit garage validations, refunds are available if returned within specific time frames (e.g., prior to the effective date or within 60 days of purchase). - However, refunds for current or prior months are not available for other permit types. It's recommended to review the specific refund policies for your permit type and to contact the CampusParc Customer Care Center or fill out the Return Request Form to initiate the return process."
 
-Source attribution:
+Source attribution: CampusParc — Returns, Refunds & Exchanges (official) — https://osu.campusparc.com/get-a-permit/returns-refunds-exchanges/
 
 ---
 
 **Grounded response 2**
 
-Query:
+Query: *I want to work out at Jesse Owens South in the evenings. What are the cheapest parking options?*
 
-Response:
+Response: "According to the context documents, there are a few options to consider for cheap parking near Jesse Owens South. One option is to park on King Avenue, which has 'big stretches of free street parking' about half a mile from Jesse Owens, according to a student on Reddit [1]. However, please note that this is a student's opinion and may not reflect official policy. Another option is to use metered parking spaces, which have a progressive pricing rate structure... as stated in the official City of Columbus — University District Parking FAQ [4]. It's also worth considering parking on west campus, as one student mentions that 'there is always parking available on west campus' [5], although this may be farther from Jesse Owens South."
 
-Source attribution:
+Source attribution: South Campus Parking (reddit); Public Parking Help (reddit); City of Columbus — University District Parking FAQ (official); Parking help please!!!!! (reddit)
 
 ---
 
 **Out-of-scope query**
 
-Query:
+Query: *What are the best dining halls at Ohio State?*
 
-System response (refusal):
+System response (refusal): "I don't have enough information on that." (no sources listed — the corpus is parking-only, so the system declined rather than answering from general knowledge.)
 
 ---
 
@@ -199,9 +194,9 @@ System response (refusal):
 <!-- Describe your query interface: what are the input fields, what does the output look like?
      Then provide a complete sample interaction transcript showing a real exchange. -->
 
-**Input fields:**
+**Input fields:** A single **"Your question"** text box, an **Ask** button, and Enter-to-submit. Built with Gradio (`app.py`), launched via `python app.py` at http://localhost:7860.
 
-**Output format:**
+**Output format:** Two read-only boxes — an **"Answer"** box (the grounded response) and a **"Retrieved from"** box listing the deduplicated source documents (title, type, and URL) the chunks came from. When the system declines, the "Retrieved from" box shows "(no sources — not enough information in the documents)".
 
 ---
 
@@ -210,9 +205,11 @@ System response (refusal):
 <!-- Show a complete query → response exchange as it actually appears in your interface.
      Must be text — not a screenshot. -->
 
-> **User:** 
+> **User:** Can I get a refund if I cancel or return my parking permit?
 
-> **System:** 
+> **System (Answer):** According to the official CampusParc documents, refunds are available under certain conditions. For annual permits purchased in full, a prorated refund is available, excluding the current and prior months. For digital day passes, temporary monthly permits, and single-exit garage validations, refunds are available if returned within specific time frames. However, refunds for current or prior months are not available. It's recommended to contact the CampusParc Customer Care Center or fill out the Return Request Form to initiate the return.
+
+> **System (Retrieved from):** • CampusParc — Returns, Refunds & Exchanges (official) — https://osu.campusparc.com/get-a-permit/returns-refunds-exchanges/
 
 ---
 
@@ -224,11 +221,11 @@ System response (refusal):
 
 | # | Question | Expected answer | System response (summarized) | Retrieval quality | Response accuracy |
 |---|----------|-----------------|------------------------------|-------------------|-------------------|
-| 1 | | | | | |
-| 2 | | | | | |
-| 3 | | | | | |
-| 4 | | | | | |
-| 5 | | | | | |
+| 1 | Cheapest parking for Jesse Owens South in the evenings? | Off-peak permit (#9) plus cheap/free south-campus street spots near JOS (#3) | Cited free street parking on King Ave ~½ mile from JOS (Reddit), metered progressive pricing (City FAQ), and west-campus availability; flagged Reddit as opinion. Would have been a plus if it surfaced off-peak parking. | Relevant | Accurate |
+| 2 | Best options for summer parking on north campus? | Partial — summer relaxed rules (#9) + general tips (#8); flagged as a likely failure case | "I don't have enough information on that." (declined, no sources) | Off-target | Inaccurate (failure case) |
+| 3 | Can I appeal a citation if I misread a parking sign? | Appeal is possible, but "I misread the sign" is usually not accepted; acknowledge both (#7) | Said there's no official policy in context; per students, appealing is "worth a shot" and some won by admitting a mistake. Cited the appeal thread. | Relevant | Partially accurate |
+| 4 | General tips to save money on parking at OSU? | Synthesis: off-peak (#9), city/UD permits (#6/#11), street parking (#5), south-campus spots (#3) | Suggested a list of three tips, including permit and street passes. Mentioned that the user should be "prepared to walk some miles to find parking" as one of the tips with no context. | Partially relevant | Partially accurate |
+| 5 | Can I get a refund if I cancel/return my permit? | Per #10: prorated refund excluding current/prior months, with conditions | Accurately summarized refund policy (prorated for paid-in-full; day passes/temp within 60 days; no current/prior-month refunds; use Return Request Form). Cited the official refunds page. | Relevant | Accurate |
 
 **Retrieval quality:** Relevant / Partially relevant / Off-target  
 **Response accuracy:** Accurate / Partially accurate / Inaccurate
@@ -248,13 +245,15 @@ System response (refusal):
      "The embedding model treated the professor's nickname as out-of-vocabulary and returned
      results from an unrelated review" is an explanation. -->
 
-**Question that failed:**
+**Question that failed:** "What are the best options for summer parking on north campus?" (Q2) — a question scoped to a specific season *and* a specific part of campus.
 
-**What the system returned:**
+**What the system returned:** "I don't have enough information on that." — a full refusal, with no sources listed.
 
-**Root cause (tied to a specific pipeline stage):**
+**Root cause (tied to a specific pipeline stage): a corpus-coverage gap that retrieval then could not paper over.** No document in the corpus addresses "summer parking on north campus" specifically. The summer-related content that does exist is off-topic for this query. The off-peak page (#9) only mentions a summer permit-purchase clause, and the "summer tips" thread (#8) is about someone starting a job, not north-campus parking. Because nothing matches all three constraints (summer + north campus + parking options), the embedding model fell back on general term overlap ("parking," "campus") and the top 5 chunks were all generic neighborhood/south-campus/west-campus discussion (best distance 0.239) — none mentioning summer at all. The scattered summer chunks (#8, #9) never even reached the top 5. With no summer-north-campus facts in the retrieved context, the grounding prompt correctly forced a refusal rather than letting the model invent an answer. So the failure isn't hallucination or a bad embedding — it's that the question asks for something the documents don't cover, and low retrieval distances (0.239) masked that gap because the topic (parking) matched even though the specifics (summer, north campus) did not.
 
-**What you would change to fix it:**
+**What you would change to fix it:** (1) Close the coverage gap directly — collect a summer-parking / north-campus source so the facts actually exist; (2) add a **relevance gate** that checks whether retrieved chunks contain the query's key terms (e.g., "summer"), not just a low average distance, before trusting them; (3) surface partial coverage to the user ("I found general parking info but nothing specific to summer on north campus") instead of a flat refusal; (4) at minimum, log when the best distance is low but no chunk contains a key query term — that mismatch is the signature of this failure.
+
+*(A second, different failure — Q4 "general tips to save money on parking" — also refused, but for a distinct reason: **retrieval ranking**. The query matched Reddit thread titles/original posts that literally say "parking tips," so the top chunks were question posts rather than the answer comments that hold the actual tips, leaving the model nothing concrete to cite.)*
 
 ---
 
@@ -263,9 +262,9 @@ System response (refusal):
 <!-- Reflect on how planning.md shaped your implementation.
      Answer both questions with at least 2–3 sentences each. -->
 
-**One way the spec helped you during implementation:**
+**One way the spec helped you during implementation:** Writing the Chunking Strategy and Retrieval Approach sections *before* coding meant the implementation was a direct translation of decisions I'd already justified, not guesses made mid-code. The spec tied the 800-character chunk cap to the 256-token input limit of `all-MiniLM-L6-v2`, so when I built the chunker I had a concrete, defensible number instead of an arbitrary one. Similarly, the "store `source_type` in metadata" idea from the Anticipated Challenges section directly shaped how I built source attribution — I knew before writing `query.py` that citations had to come from chunk metadata, not the LLM.
 
-**One way your implementation diverged from the spec, and why:**
+**One way your implementation diverged from the spec, and why:** The spec said official pages would be split "by section/heading/paragraph," but when I inspected the real chunk output that produced useless heading-only fragments like "Off-Peak Hours are defined as:" with the hours stranded in a separate chunk. So I added **greedy packing** — combining small adjacent blocks up to the cap so a heading stays attached to its content. A related divergence: a Reddit post split into a tiny "title + 'Hey guys,'" fragment because the poster left a blank line after the greeting, so I added a rule to merge a short leading block into the next. Neither refinement was in the original spec; both came from looking at actual output during Milestones 3–4. The corpus also shrank from the planned 12 sources to 11 (two Columbus pages were replaced by one University District FAQ PDF), settling at 108 chunks.
 
 ---
 
@@ -280,14 +279,14 @@ System response (refusal):
      chunk_text(). It returned a function using a fixed character split. I overrode the
      chunk size from 500 to 200 because my documents are short reviews, not long guides." -->
 
-**Instance 1**
+**Instance 1 — implementing the chunking pipeline from my spec**
 
-- *What I gave the AI:*
-- *What it produced:*
-- *What I changed or overrode:*
+- *What I gave the AI:* My planning.md Chunking Strategy section (800-char cap, 150-char overlap, structure-aware, "keep each Reddit comment as its own chunk") and asked it to implement the loader and chunker.
+- *What it produced:* `ingest.py` (load + clean) and `chunking.py` (block splitting with the size cap and overlap).
+- *What I changed or overrode:* The first version split official pages strictly on blank lines, which produced fragment chunks like "Off-Peak Hours are defined as:" divorced from the actual hours. I directed it to combine small official blocks up to the cap instead. Later, reviewing retrieval results, I caught a Reddit post that had been split into a near-empty "Worth it to Appeal Parking Citation? Hey guys," chunk and directed that "Hey guys," be combined with the next block so the original post stays whole.
 
-**Instance 2**
+**Instance 2 — wiring up generation + the Gradio interface**
 
-- *What I gave the AI:*
-- *What it produced:*
-- *What I changed or overrode:*
+- *What I gave the AI:* My grounding requirement (answer only from retrieved context, cite sources, decline when uncovered) and the instruction to use Gradio (the recommended interface), plus the existing retrieval function.
+- *What it produced:* `query.py` (Groq `llama-3.3-70b-versatile` call with a strict grounding system prompt and programmatic source attribution) and `app.py` (Gradio UI).
+- *What I changed or overrode:* Installing Gradio broke the environment two ways, and I directed the fixes: (1) Gradio forced `huggingface-hub` to 1.x, which conflicted with `transformers`. I had it upgrade `transformers`/`sentence-transformers` to compatible versions instead of downgrading Gradio below the required version; (2) importing Gradio failed because my `chunk.py` shadowed Python's standard-library `chunk` module (Gradio's `pydub` dependency does `from chunk import Chunk`), so I had it rename the module to `chunking.py`.
