@@ -26,6 +26,7 @@ import re
 MAX_CHARS = 800
 OVERLAP_CHARS = 150
 MIN_CHARS = 20  # drop fragments shorter than this
+SHORT_LEAD_CHARS = 80  # a leading Reddit block this short is just the title line
 
 
 def _split_blocks(text: str) -> list[str]:
@@ -86,6 +87,12 @@ def _text_to_pieces(doc: dict) -> list[str]:
     """Apply the per-source chunking strategy and return raw text pieces."""
     blocks = _split_blocks(doc["text"])
     if doc["source_type"] == "reddit":
+        # The first block is the thread title; if the original post put a blank
+        # line right after it (e.g. "Title\nHey guys,\n\n...") the title lands in
+        # its own tiny fragment. Merge that short leading block into the next so
+        # the original post stays whole. Comments are left untouched.
+        if len(blocks) >= 2 and len(blocks[0]) < SHORT_LEAD_CHARS:
+            blocks = [f"{blocks[0]}\n\n{blocks[1]}", *blocks[2:]]
         # One comment/post per chunk; only sub-split if a block is too long.
         pieces: list[str] = []
         for block in blocks:

@@ -55,7 +55,7 @@
 
 **Why these choices fit your documents:** The 800-char cap keeps every chunk inside the 256-token input limit of `all-MiniLM-L6-v2` (longer text is silently truncated). The corpus has two shapes, so chunking is structure-aware: Reddit threads are split one-comment-per-chunk so conflicting opinions never blend into one vector, while official pages have their short blocks (headings, list items, paragraphs) greedily packed up to the cap so a heading stays attached to the content beneath it. Preprocessing strips HTML entities, non-breaking spaces, and Reddit UI noise (Reply/Share/vote counts/timestamps) before chunking. See `ingest.py` and `chunk.py`.
 
-**Final chunk count:** 109 chunks across 11 documents (8 Reddit threads + 3 official pages/PDF). Sizes range 20–799 characters (avg ~308); none exceed the 800-character cap.
+**Final chunk count:** 108 chunks across 11 documents (8 Reddit threads + 3 official pages/PDF). Sizes range 20–799 characters (avg ~311); none exceed the 800-character cap.
 
 ---
 
@@ -83,9 +83,14 @@
      Consider: context length limits, multilingual support, accuracy on domain-specific text,
      latency, and local vs. API-hosted. -->
 
-**Model used:**
+**Model used:** `all-MiniLM-L6-v2` via `sentence-transformers` (384-dimensional embeddings, runs locally with no API key or rate limits). Chunks are embedded with normalized vectors and stored in a persistent **ChromaDB** collection (`parking_chunks`) using **cosine** distance, so a retrieval score is `1 - cosine_similarity` (0 = identical meaning; lower is better). Each stored chunk carries metadata for attribution: `source`, `source_type` (reddit/official), `url`, `filename`, and `position`. Retrieval uses **top-k = 5**. See `vectorstore.py`.
 
-**Production tradeoff reflection:**
+**Production tradeoff reflection:** If I were deploying this for real users and cost weren't a constraint:
+- **Accuracy on opinion text:** I'd test a stronger model like `all-mpnet-base-v2` (768-dim) or an API model (`text-embedding-3-large`). Short, sarcastic, slangy Reddit opinions are exactly where the small MiniLM model loses nuance.
+- **Context length:** MiniLM's 256-token cap forces me to keep chunks small. A long-context embedding model would let me embed whole official sections intact, keeping related rules together.
+- **Local vs. API:** local (current) = free, private, no rate limits, but a lower accuracy ceiling and uses my own compute. API = higher accuracy and zero infra, but per-call cost at scale and sends data to a third party.
+- **Multilingual:** not needed — this corpus is all English, so I would not pay for a multilingual model here.
+- **Latency:** local embedding is fine for a 108-chunk corpus; for thousands of live queries I'd weigh a hosted model or a quantized local one.
 
 ---
 
@@ -95,36 +100,39 @@
      For at least 2 of the 3, explain why the returned chunks are relevant to the query.
      Results must be text — not screenshots. -->
 
-**Query 1:**
+**Query 1:** *"I want to work out at Jesse Owens South in the evenings. What are the cheapest parking options?"*
 
-Top returned chunks:
--
--
--
+Top returned chunks (full text):
 
-Relevance explanation:
+1. **[dist 0.370] *South Campus Parking* (reddit):** "King has big stretches of free street parking. Half mile from Jesse Owens, tops"
+2. **[dist 0.485] *Public Parking Help* (reddit):** "Public Parking Help Hello, I am a sophomore here at OSU, and I'm looking at bringing a vehicle down here next week to help make travel easier for me and my family. Im curious, is there any parking, such as like roadside parking that is free that I could possibly keep a car at overnight and move every day or two? I'm willing to walk some miles to anything."
+3. **[dist 0.487] *South Campus Parking* (reddit):** "South Campus Parking Can anyone explain how parking around south campus would work? My family is visiting for the next couple days, and I wasn't sure what parking would be available to them. I live off campus by JOS, and I was wondering if there's street parking or a safe/cheap garage?"
 
----
-
-**Query 2:**
-
-Top returned chunks:
--
--
--
-
-Relevance explanation:
+Relevance explanation: The top hit directly names free street parking a half-mile from Jesse Owens. This is exactly what the query asks for, and it's from the right source (the South Campus thread). The other two are people asking about the same cheap/free parking near JOS and south campus, so they surround the answer with relevant context. Best distance 0.370 (< 0.5).
 
 ---
 
-**Query 3:**
+**Query 2:** *"Can I appeal a citation if I misread a parking sign?"*
 
-Top returned chunks:
--
--
--
+Top returned chunks (full text):
 
-Relevance explanation:
+1. **[dist 0.358] *Worth it to Appeal Parking Citation?* (reddit):** "Worth it to Appeal Parking Citation? Hey guys, I parked outside my research labs parking lot, which I am not supposed to, but I was only going to be there for an hour. Unfortunately campusparc caught me and hit me with a $56 fine. Is it worth appealing, and what would I even say?"
+2. **[dist 0.359] *Worth it to Appeal Parking Citation?* (reddit):** "I've appealed both my citations online and it worked. However, in those cases, I got the citations because I reverse parked and my license plate wasn't showing. I wasn't even sure what the problem was until I called them and they clarified it for me. I think it's worth a shot to appeal!"
+3. **[dist 0.383] *Worth it to Appeal Parking Citation?* (reddit):** "No. You parked someplace you were not supposed to park. You have no defense. Appealing is for when they messed up and you were not supposed to be ticketed. That's not you, you should have been ticketed and you were. You probably won't do that again… that's the point of a ticket."
+
+Relevance explanation: Every hit comes from the citation-appeal thread and speaks directly to whether an appeal works, which is relevant to the scenario behind "misread a sign." The chunks usefully disagree: one says appeals worked, but only because the citation itself was questionable (plate not showing), while another flatly says there is "no defense" if you genuinely parked where you shouldn't have. That tension is ideal grounding for a nuanced, honest answer. Best distance 0.358.
+
+---
+
+**Query 3:** *"Can I get a refund if I cancel or return my parking permit?"*
+
+Top returned chunks (full text):
+
+1. **[dist 0.348] *CampusParc — Returns, Refunds & Exchanges* (official):** "Refunds for current or prior months are not available; payment remains the permit holder's responsibility. Upon permit return, a temporary multi-day surface lot permit can be provided for use for the remainder of the month upon request. Permits should be returned by the close of business on the last working day of the month to avoid being charged for the following month. Purchased in Full: Customers returning an annual permit purchased in full will receive a prorated refund, excluding the current and prior months."
+2. **[dist 0.402] *CampusParc — Returns, Refunds & Exchanges* (official):** "Returns, Refunds & Exchanges We want to ensure that you get the maximum use out of your permit. If for any reason you're unsatisfied with the permit you purchased or wish to explore another permit option, we're happy to accommodate. Returns and Refunds Annual permits may be returned at any time by stopping by the CampusParc Customer Care Center or by filling out the Return Request Form . See below for specific purchase-type policies."
+3. **[dist 0.476] *CampusParc — Returns, Refunds & Exchanges* (official):** "Employees utilizing payroll deduction must address the cost difference for the current calendar month at the time of exchange, with deductions for the new permit becoming effective the following calendar month. Depending on the permit type, visitor permits may be eligible for refunds. Digital Day Passes and Temporary Monthly Permits: Any unused digital day passes, inclusive of Offstreet permits, or temporary monthly permits are eligible for refunds prior to the effective date of the permit and within 60 days of purchase. Refunds are no longer available once the permit goes into effect. Partial refunds are not available for partially used visitor permits. To request a return please stop by the CampusParc Customer Care Center or fill out the Return Request Form ."
+
+Relevance explanation: All top hits come from the official Returns/Refunds page and state the actual policy (prorated refund excluding current/prior months, return-by-end-of-month timing, and the special cases for day passes and visitor permits). This is the correct, high-authority grounding for a factual policy question. Best distance 0.348.
 
 ---
 
