@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from chunk import MAX_CHARS, chunk_documents
+from chunking import MAX_CHARS, chunk_documents
 from ingest import load_documents
 
 OUTPUT_PATH = Path(__file__).parent / "chunks.jsonl"

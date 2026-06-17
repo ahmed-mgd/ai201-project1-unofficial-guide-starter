@@ -36,7 +36,7 @@
 | 10 | CampusParc — Returns, Refunds & Exchanges | Official | https://osu.campusparc.com/get-a-permit/returns-refunds-exchanges/ |
 | 11 | City of Columbus — University District Parking FAQ (PDF) | Official (PDF) | https://www.columbus.gov/files/sharedassets/city/v/1/services/ud-website-faq-_updated-6_10_21.pdf |
 
-**Ingestion process.** Reddit and Columbus.gov block automated scraping, so the raw sources were collected once in the browser (archived under `documents/raw/`) and converted to a consistent plain-text format with a small `title / url / source_type` header: Reddit threads from their `.json` (one comment per blank-line block; deleted/removed/AutoModerator comments and one-liners dropped), the CampusParc pages from their main content area, and the Columbus FAQ extracted from its PDF. The resulting files live in `documents/`. `ingest.py` then loads every file, parses its header, and cleans the body — decoding HTML entities, stripping non-breaking spaces, and removing Reddit UI noise (Reply/Share/vote counts/timestamps) — before handing the text to `chunk.py`. Run the whole pipeline with `python build_chunks.py`, which writes `chunks.jsonl` and prints the chunk count and sample chunks.
+**Ingestion process.** Reddit and Columbus.gov block automated scraping, so the raw sources were collected once in the browser (archived under `documents/raw/`) and converted to a consistent plain-text format with a small `title / url / source_type` header: Reddit threads from their `.json` (one comment per blank-line block; deleted/removed/AutoModerator comments and one-liners dropped), the CampusParc pages from their main content area, and the Columbus FAQ extracted from its PDF. The resulting files live in `documents/`. `ingest.py` then loads every file, parses its header, and cleans the body — decoding HTML entities, stripping non-breaking spaces, and removing Reddit UI noise (Reply/Share/vote counts/timestamps) — before handing the text to `chunking.py`. Run the whole pipeline with `python build_chunks.py`, which writes `chunks.jsonl` and prints the chunk count and sample chunks.
 
 ---
 
@@ -53,7 +53,7 @@
 
 **Overlap:** 150 characters, applied only when a single block exceeds the cap and must be sub-split. Reddit comments are kept whole and need no overlap.
 
-**Why these choices fit your documents:** The 800-char cap keeps every chunk inside the 256-token input limit of `all-MiniLM-L6-v2` (longer text is silently truncated). The corpus has two shapes, so chunking is structure-aware: Reddit threads are split one-comment-per-chunk so conflicting opinions never blend into one vector, while official pages have their short blocks (headings, list items, paragraphs) greedily packed up to the cap so a heading stays attached to the content beneath it. Preprocessing strips HTML entities, non-breaking spaces, and Reddit UI noise (Reply/Share/vote counts/timestamps) before chunking. See `ingest.py` and `chunk.py`.
+**Why these choices fit your documents:** The 800-char cap keeps every chunk inside the 256-token input limit of `all-MiniLM-L6-v2` (longer text is silently truncated). The corpus has two shapes, so chunking is structure-aware: Reddit threads are split one-comment-per-chunk so conflicting opinions never blend into one vector, while official pages have their short blocks (headings, list items, paragraphs) greedily packed up to the cap so a heading stays attached to the content beneath it. Preprocessing strips HTML entities, non-breaking spaces, and Reddit UI noise (Reply/Share/vote counts/timestamps) before chunking. See `ingest.py` and `chunking.py`.
 
 **Final chunk count:** 108 chunks across 11 documents (8 Reddit threads + 3 official pages/PDF). Sizes range 20–799 characters (avg ~311); none exceed the 800-character cap.
 
@@ -145,9 +145,18 @@ Relevance explanation: All top hits come from the official Returns/Refunds page 
      Do not just say "I told it to use the documents" — show the actual instruction or explain
      the mechanism. -->
 
-**System prompt grounding instruction:**
+**System prompt grounding instruction:** Generation uses Groq's `llama-3.3-70b-versatile` at `temperature=0` (see `query.py`). The retrieved chunks are inserted into the user message as numbered, source-labeled context, and the system prompt *enforces* grounding rather than suggesting it:
 
-**How source attribution is surfaced in the response:**
+> You are The Unofficial Guide, an assistant that answers questions about parking at The Ohio State University. Answer the user's question using ONLY the information in the provided context documents. Follow these rules strictly:
+> - Use only facts found in the context. Never use outside or prior knowledge.
+> - If the context does not contain enough information to answer the question, reply with exactly: "I don't have enough information on that." and nothing else.
+> - When the sources disagree, say so instead of silently picking one.
+> - Note when a claim is student opinion (Reddit) versus official policy.
+> Be concise and specific.
+
+The "ONLY ... never use outside or prior knowledge" rule plus the mandated exact decline phrase is what prevents the model from answering from its training data on out-of-scope questions.
+
+**How source attribution is surfaced in the response:** Attribution is **programmatic, not model-generated**. After retrieval, `query.py` builds the source list directly from the retrieved chunks' metadata (`source` title, `source_type`, `url`), deduplicated in first-seen order — so the citations can never be hallucinated by the LLM. The Gradio UI shows them in a separate **"Retrieved from"** box. When the model returns the decline message, the source list is deliberately emptied (it answered nothing, so it cites nothing).
 
 ---
 
