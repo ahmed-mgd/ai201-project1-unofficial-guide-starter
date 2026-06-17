@@ -27,8 +27,7 @@ The domain for this project is parking at the Ohio State University. Parking at 
 | 8 | r/OSU — "Parking tips for someone who doesn't go here" | Summer / visitor / occasional-parking tips | https://www.reddit.com/r/OSU/comments/1ke38zh/parking_tips_for_someone_who_doesnt_go_here/ |
 | 9 | CampusParc — Off-Peak Permit Parking | Official: off-peak windows (weekday eves 4pm–3am, weekends), summer & holiday access | https://osu.campusparc.com/find-parking/off-peak-permit-parking/ |
 | 10 | CampusParc — Returns, Refunds & Exchanges | Official: how/when permits can be refunded or exchanged | https://osu.campusparc.com/get-a-permit/returns-refunds-exchanges/ |
-| 11 | City of Columbus — University District Parking Plan | Official: residential street-permit program around campus | https://www.columbus.gov/Services/Parking-Street-Services/Mobility-Parking-Services/Residential-Permit-Parking-Program/University-District-Parking-Plan |
-| 12 | City of Columbus — UDA Parking Permit detail sheets (PDF) | Official: zone-by-zone permit detail sheets | https://www.columbus.gov/files/sharedassets/city/v/1/services/uda-final-plan-detail-sheets_updated.pdf |
+| 11 | City of Columbus — University District Parking FAQ (PDF) | Official: FAQ on the University District residential street-permit program around campus | https://www.columbus.gov/files/sharedassets/city/v/1/services/ud-website-faq-_updated-6_10_21.pdf |
 
 ---
 
@@ -81,7 +80,7 @@ The domain for this project is parking at the Ohio State University. Parking at 
 
 2. **Source-type attribution (unofficial vs official).** A chunk from a Reddit comment carries far less authority than a CampusParc rule, but to the embedding they look similar. Risk: the system states an unverified student claim ("street parking is totally free on X street") as if it were an official rule. Mitigation: store a `source_type` (reddit / official) in chunk metadata and surface it in citations.
 
-3. **PDF extraction failure (#12).** The Columbus UDA detail-sheets PDF may be table/map-heavy; `pdfplumber` does no OCR, so image-based content extracts as empty or garbled chunks that either pollute the store or silently drop coverage. Mitigation: inspect extracted text before embedding; fall back to the HTML plan page (#11) if extraction is poor.
+3. **PDF extraction quality (#11).** The Columbus University District FAQ is a PDF; `pdfplumber` does no OCR, so any image-based content extracts as empty or garbled chunks that either pollute the store or silently drop coverage. Mitigation: inspect the extracted text before embedding, and paste the text manually if extraction is poor.
 
 4. **Thin coverage = hallucination on edge queries.** Small corpus means some questions (e.g., north-campus summer, Q2) have weak or no source coverage. Risk: the LLM fills the gap from general knowledge instead of saying "I don't know." Mitigation: instruct the LLM to answer only from retrieved context and explicitly say when the documents don't cover the question.
 
